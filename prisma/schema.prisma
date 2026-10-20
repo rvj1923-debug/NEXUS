@@ -1,0 +1,677 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String     @id @default(uuid())
+  email         String     @unique
+  passwordHash  String     @map("password_hash")
+  fullName      String     @map("full_name")
+  isActive      Boolean    @default(true) @map("is_active")
+  departmentId  String?    @map("department_id")
+  lastLoginAt   DateTime?  @map("last_login_at")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  department    Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  userRoles     UserRole[]
+  auditLogs     AuditLog[]
+  reportedIncidents Incident[] @relation("ReportedByUser")
+  incidentActions   IncidentAction[]
+  reportRuns    ReportRun[]
+  enrolledNfcCards NfcCard[] @relation("EnrolledCards")
+  assignedPhoneAssignments PhoneAssignment[] @relation("AssignedByUser")
+
+  @@map("users")
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  code        String           @unique
+  name        String
+  description String?
+  isSystem    Boolean          @default(false) @map("is_system")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  userRoles   UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  code        String           @unique
+  module      String
+  description String
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId    String   @map("user_id")
+  roleId    String   @map("role_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Department {
+  id              String        @id @default(uuid())
+  code            String        @unique
+  name            String
+  description     String?
+  supervisorId    String?       @map("supervisor_id")
+  supervisorName  String?       @map("supervisor_name")
+  supervisorEmail String?       @map("supervisor_email")
+  isActive        Boolean       @default(true) @map("is_active")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  users        User[]
+  employees    Employee[]
+  phoneAssets  PhoneAsset[]
+
+  @@map("departments")
+}
+
+model Employee {
+  id                   String                @id @default(uuid())
+  employeeCode         String                @unique @map("employee_code")
+  firstName            String                @map("first_name")
+  lastName             String                @map("last_name")
+  email                String?               @unique
+  phoneNumber          String?               @map("phone_number")
+  departmentId         String?               @map("department_id")
+  designation          String?
+  status               String                @default("ACTIVE") // ACTIVE, ON_LEAVE, SUSPENDED, TERMINATED
+  worksite             String?               @default("Headquarters") // Worksite / location
+  profilePhotoUrl      String?               @map("profile_photo_url")
+  supervisorId         String?               @map("supervisor_id")
+  supervisorName       String?               @map("supervisor_name")
+  supervisorEmail      String?               @map("supervisor_email")
+  multiCardAuthorized  Boolean               @default(false) @map("multi_card_authorized")
+  isActive             Boolean               @default(true) @map("is_active")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  deletedAt            DateTime?             @map("deleted_at")
+
+  department           Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  supervisor           Employee?             @relation("EmployeeHierarchy", fields: [supervisorId], references: [id], onDelete: SetNull)
+  subordinates         Employee[]            @relation("EmployeeHierarchy")
+  nfcCards             NfcCard[]
+  shifts               EmployeeShift[]
+  assignments          PhoneAssignment[]
+  custodyTransactions CustodyTransaction[]
+  custodyEvents        CustodyEvent[]
+  returnDeadlines      ReturnDeadline[]
+  overdueCases         OverdueCase[]
+  incidents            Incident[]
+  notifications        Notification[]
+  kioskRequests        KioskVerificationRequest[]
+
+  @@index([departmentId])
+  @@index([status])
+  @@index([supervisorId])
+  @@map("employees")
+}
+
+model EmployeeShift {
+  id                 String    @id @default(uuid())
+  employeeId         String    @map("employee_id")
+  shiftName          String    @map("shift_name")
+  startTime          String    @map("start_time") // HH:mm format, e.g. "08:00"
+  endTime            String    @map("end_time")   // HH:mm format, e.g. "17:00"
+  gracePeriodMinutes Int       @default(30) @map("grace_period_minutes")
+  daysOfWeek         String    @default("MON,TUE,WED,THU,FRI") @map("days_of_week")
+  isActive           Boolean   @default(true) @map("is_active")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  employee           Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_shifts")
+}
+
+model NfcCard {
+  id                String               @id @default(uuid())
+  cardUid           String               @unique @map("card_uid") // Never employee PK
+  cardNumber        String?              @unique @map("card_number")
+  identifierType    String               @default("MIFARE_CLASSIC") @map("identifier_type") // MIFARE_CLASSIC, MIFARE_DESFIRE, HID_ICLASS, FELICA
+  readerSource      String?              @default("DESK_READER") @map("reader_source")
+  employeeId        String?              @map("employee_id")
+  phoneAssetId      String?              @map("phone_asset_id")
+  status            String               @default("ACTIVE") // ACTIVE, UNASSIGNED, REVOKED, LOST, DAMAGED, EXPIRED
+  isMaintenanceCard Boolean              @default(false) @map("is_maintenance_card")
+  enrolledByUserId  String?              @map("enrolled_by_user_id")
+  issuedAt          DateTime?            @default(now()) @map("issued_at")
+  revokedAt         DateTime?            @map("revoked_at")
+  replacementReason String?              @map("replacement_reason")
+  notes             String?
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+
+  employee          Employee?            @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  phoneAsset        PhoneAsset?          @relation(fields: [phoneAssetId], references: [id], onDelete: SetNull)
+  enrolledByUser    User?                @relation("EnrolledCards", fields: [enrolledByUserId], references: [id], onDelete: SetNull)
+  transactions      CustodyTransaction[]
+
+  @@index([cardUid])
+  @@index([employeeId])
+  @@index([phoneAssetId])
+  @@index([status])
+  @@map("nfc_cards")
+}
+
+model NfcReader {
+  id               String               @id @default(uuid())
+  readerIdentifier String               @unique @map("reader_identifier") // e.g. KIOSK-MAIN-01
+  name             String
+  location         String
+  ipAddress        String?              @map("ip_address")
+  status           String               @default("ONLINE") // ONLINE, OFFLINE, MAINTENANCE
+  readerType       String               @default("KIOSK") @map("reader_type") // KIOSK, DESKTOP, MOBILE
+  connectionMode   String?              @default("MODE_A_KEYBOARD_WEDGE") @map("connection_mode") // MODE_A_KEYBOARD_WEDGE, MODE_B_PCSC, MODE_C_RAW_HID
+  vendorId         String?              @map("vendor_id")
+  productId        String?              @map("product_id")
+  deviceInstanceId String?              @map("device_instance_id")
+  pairedKiosk      String?              @map("paired_kiosk")
+  lastScannedAt    DateTime?            @map("last_scanned_at")
+  lastError        String?              @map("last_error")
+  agentVersion     String?              @map("agent_version")
+  lastHeartbeatAt  DateTime?            @map("last_heartbeat_at")
+  isActive         Boolean              @default(true) @map("is_active")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+
+  transactions     CustodyTransaction[]
+
+  @@map("nfc_readers")
+}
+
+model PhoneAsset {
+  id                 String                @id @default(uuid())
+  assetTag           String                @unique @map("asset_tag") // Company Asset ID / Tag
+  barcode            String?               @unique
+  imei               String                @unique // Primary IMEI (IMEI 1)
+  imei2              String?               // Secondary IMEI 2 (optional)
+  serialNumber       String?               @unique @map("serial_number")
+  mobileNumber       String?               @map("mobile_number") // Cell line assigned
+  simDetails         String?               @map("sim_details") // SIM ICCID / Carrier
+  brand              String
+  model              String
+  color              String?
+  storageCapacity    String?               @map("storage_capacity")
+  condition          String                @default("EXCELLENT") // EXCELLENT, GOOD, FAIR, DAMAGED, REPAIR_PENDING, RETIRED
+  operationalStatus  String                @default("ACTIVE") @map("operational_status") // ACTIVE, UNDER_MAINTENANCE, DAMAGED, LOST, RETIRED
+  assignmentStatus   String                @default("UNASSIGNED") @map("assignment_status") // UNASSIGNED, ASSIGNED, SHARED_POOL
+  custodyStatus      String                @default("AVAILABLE") @map("custody_status") // AVAILABLE, ISSUED, OVERDUE
+  issuedAccessories  String?               @default("Charger, Case") @map("issued_accessories")
+  imageUrl           String?               @map("image_url")
+  departmentId       String?               @map("department_id")
+  purchaseDate       DateTime?             @map("purchase_date")
+  warrantyExpiry     DateTime?             @map("warranty_expiry")
+  notes              String?
+  isActive           Boolean               @default(true) @map("is_active")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+  deletedAt          DateTime?             @map("deleted_at")
+
+  department         Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  nfcTags            NfcCard[]
+  assignments        PhoneAssignment[]
+  transactions       CustodyTransaction[]
+  custodyEvents      CustodyEvent[]
+  returnDeadlines    ReturnDeadline[]
+  overdueCases       OverdueCase[]
+  incidents          Incident[]
+  notifications      Notification[]
+  kioskRequests      KioskVerificationRequest[]
+
+  @@index([custodyStatus])
+  @@index([assignmentStatus])
+  @@index([operationalStatus])
+  @@index([condition])
+  @@index([departmentId])
+  @@map("phone_assets")
+}
+
+model PhoneAssignment {
+  id                         String           @id @default(uuid())
+  employeeId                 String           @map("employee_id")
+  phoneAssetId               String           @map("phone_asset_id")
+  assignedByUserId           String?          @map("assigned_by_user_id")
+  assignmentType             String           @default("DEDICATED") @map("assignment_type") // DEDICATED, POOL, ROTATIONAL
+  startDate                  DateTime         @default(now()) @map("start_date")
+  endDate                    DateTime?        @map("end_date")
+  status                     String           @default("ACTIVE") // ACTIVE, SUSPENDED, TERMINATED, REPLACED
+  replacementForAssignmentId String?          @map("replacement_for_assignment_id")
+  notes                      String?
+  createdAt                  DateTime         @default(now()) @map("created_at")
+  updatedAt                  DateTime         @updatedAt @map("updated_at")
+
+  employee                   Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  phoneAsset                 PhoneAsset       @relation(fields: [phoneAssetId], references: [id], onDelete: Restrict)
+  assignedByUser             User?            @relation("AssignedByUser", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+  replacedAssignment         PhoneAssignment? @relation("AssignmentReplacementChain", fields: [replacementForAssignmentId], references: [id], onDelete: SetNull)
+  replacementAssignments     PhoneAssignment[] @relation("AssignmentReplacementChain")
+
+  @@index([employeeId])
+  @@index([phoneAssetId])
+  @@index([status])
+  @@map("phone_assignments")
+}
+
+model CustodyTransaction {
+  id                 String          @id @default(uuid())
+  transactionCode    String          @unique @map("transaction_code")
+  transactionType    String          @map("transaction_type") // ISSUANCE, SURRENDER
+  phoneAssetId       String?         @map("phone_asset_id")
+  employeeId         String?         @map("employee_id")
+  nfcCardId          String?         @map("nfc_card_id")
+  nfcReaderId        String?         @map("nfc_reader_id")
+  handledByUserId    String?         @map("handled_by_user_id")
+  timestamp          DateTime        @default(now())
+  returnDeadlineAt   DateTime?       @map("return_deadline_at")
+  conditionAtAction  String          @default("GOOD") @map("condition_at_action") // GOOD, MINOR_DAMAGE, MAJOR_DAMAGE, NOT_FUNCTIONAL, ACCESSORIES_MISSING
+  status             String          @default("ISSUED") // PENDING_ISSUANCE, ISSUED, RETURNED, OVERDUE, LOST, DISPUTED
+  actualReturnAt     DateTime?       @map("actual_return_at")
+  returnStatus       String?         @map("return_status") // ON_TIME, LATE, OVERDUE, NOT_RETURNED
+  custodyDurationMinutes Int?        @map("custody_duration_minutes")
+  overdueMinutes     Int             @default(0) @map("overdue_minutes")
+  accessoriesIssued  String?         @default("Phone, Charger, Case") @map("accessories_issued")
+  accessoriesReturned String?        @map("accessories_returned")
+  conditionNotes     String?         @map("condition_notes")
+  photoEvidenceUrl   String?         @map("photo_evidence_url")
+  idempotencyKey     String?         @unique @map("idempotency_key")
+  isManualOverride   Boolean         @default(false) @map("is_manual_override")
+  overrideReason     String?         @map("override_reason")
+  surrenderedByRepresentative Boolean @default(false) @map("surrendered_by_representative")
+  representativeName String?         @map("representative_name")
+  remarks            String?
+  verifiedViaNfc     Boolean         @default(true) @map("verified_via_nfc")
+  createdAt          DateTime        @default(now()) @map("created_at")
+
+  phoneAsset         PhoneAsset?     @relation(fields: [phoneAssetId], references: [id], onDelete: SetNull)
+  employee           Employee?       @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  nfcCard            NfcCard?        @relation(fields: [nfcCardId], references: [id], onDelete: SetNull)
+  nfcReader          NfcReader?      @relation(fields: [nfcReaderId], references: [id], onDelete: SetNull)
+  returnDeadline     ReturnDeadline?
+  overdueCases       OverdueCase[]
+  custodyEvents      CustodyEvent[]
+  incidents          Incident[]
+
+  @@index([phoneAssetId])
+  @@index([employeeId])
+  @@index([timestamp])
+  @@index([transactionType])
+  @@index([status])
+  @@map("custody_transactions")
+}
+
+model CustodyEvent {
+  id                   String              @id @default(uuid())
+  transactionId        String?             @map("transaction_id")
+  phoneAssetId         String              @map("phone_asset_id")
+  employeeId           String              @map("employee_id")
+  eventType            String              @map("event_type") // CHECKED_OUT, CHECKED_IN, EXTENDED, RECALLED, MARKED_OVERDUE
+  actorUserId          String?             @map("actor_user_id")
+  details              String?
+  timestamp            DateTime            @default(now())
+
+  transaction          CustodyTransaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  phoneAsset           PhoneAsset          @relation(fields: [phoneAssetId], references: [id], onDelete: Restrict)
+  employee             Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([phoneAssetId])
+  @@index([employeeId])
+  @@index([timestamp])
+  @@map("custody_events")
+}
+
+model ReturnDeadline {
+  id                       String              @id @default(uuid())
+  custodyTransactionId     String              @unique @map("custody_transaction_id")
+  phoneAssetId             String              @map("phone_asset_id")
+  employeeId               String              @map("employee_id")
+  expectedReturnAt         DateTime            @map("expected_return_at")
+  originalExpectedReturnAt DateTime?           @map("original_expected_return_at")
+  extendedReturnAt         DateTime?           @map("extended_return_at")
+  actualReturnAt           DateTime?           @map("actual_return_at")
+  status                   String              @default("PENDING") // PENDING, RETURNED_ON_TIME, RETURNED_LATE, OVERDUE
+  gracePeriodMinutes       Int                 @default(30) @map("grace_period_minutes")
+  overtimeMinutes          Int                 @default(0) @map("overtime_minutes")
+  isExempt                 Boolean             @default(false) @map("is_exempt")
+  exemptionReason          String?             @map("exemption_reason")
+  createdAt                DateTime            @default(now()) @map("created_at")
+  updatedAt                DateTime            @updatedAt @map("updated_at")
+
+  custodyTransaction       CustodyTransaction  @relation(fields: [custodyTransactionId], references: [id], onDelete: Cascade)
+  phoneAsset               PhoneAsset          @relation(fields: [phoneAssetId], references: [id], onDelete: Restrict)
+  employee                 Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  extensions               DeadlineExtension[]
+
+  @@index([status])
+  @@index([expectedReturnAt])
+  @@map("return_deadlines")
+}
+
+model DeadlineExtension {
+  id               String         @id @default(uuid())
+  returnDeadlineId String         @map("return_deadline_id")
+  previousDeadline DateTime       @map("previous_deadline")
+  newDeadline      DateTime       @map("new_deadline")
+  extensionMinutes Int            @map("extension_minutes")
+  reason           String
+  approvedByUserId String?        @map("approved_by_user_id")
+  requestedBy      String?        @map("requested_by")
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  returnDeadline   ReturnDeadline @relation(fields: [returnDeadlineId], references: [id], onDelete: Cascade)
+
+  @@index([returnDeadlineId])
+  @@map("deadline_extensions")
+}
+
+model OverdueCase {
+  id                     String              @id @default(uuid())
+  caseNumber             String              @unique @map("case_number")
+  phoneAssetId           String?             @map("phone_asset_id")
+  employeeId             String?             @map("employee_id")
+  custodyTransactionId   String              @map("custody_transaction_id")
+  detectedAt             DateTime            @default(now()) @map("detected_at")
+  resolvedAt             DateTime?           @map("resolved_at")
+  resolutionType         String?             @map("resolution_type") // SURRENDERED, REPORTED_LOST, EXCUSED, ESCALATED_HR, OVERTIME_APPROVED, OVERTIME_NOT_APPROVED
+  resolutionNotes        String?             @map("resolution_notes")
+  status                 String              @default("OPEN") // OPEN, ESCALATED, RESOLVED
+  escalationTier         Int                 @default(0) @map("escalation_tier")
+  minutesOverdue         Int                 @default(0) @map("minutes_overdue")
+  lastEscalatedAt        DateTime?           @map("last_escalated_at")
+  acknowledgedAt         DateTime?           @map("acknowledged_at")
+  acknowledgedByUserId   String?             @map("acknowledged_by_user_id")
+  acknowledgedNotes      String?             @map("acknowledged_notes")
+  assignedSupervisorId   String?             @map("assigned_supervisor_id")
+  supervisorEmail        String?             @map("supervisor_email")
+  supervisorNotifiedAt   DateTime?           @map("supervisor_notified_at")
+  overtimeApprovalStatus String              @default("PENDING") @map("overtime_approval_status") // PENDING, APPROVED, NOT_APPROVED
+  supervisorReviewedBy   String?             @map("supervisor_reviewed_by")
+  supervisorReviewedAt   DateTime?           @map("supervisor_reviewed_at")
+  supervisorRemarks      String?             @map("supervisor_remarks")
+  hrEmail                String?             @map("hr_email")
+  hrEmailSentAt          DateTime?           @map("hr_email_sent_at")
+  createdAt              DateTime            @default(now()) @map("created_at")
+  updatedAt              DateTime            @updatedAt @map("updated_at")
+
+  phoneAsset             PhoneAsset?         @relation(fields: [phoneAssetId], references: [id], onDelete: Restrict)
+  employee               Employee?           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  custodyTransaction     CustodyTransaction  @relation(fields: [custodyTransactionId], references: [id], onDelete: Restrict)
+  escalations            OverdueEscalation[]
+  notifications          Notification[]
+
+  @@index([status])
+  @@index([employeeId])
+  @@index([phoneAssetId])
+  @@map("overdue_cases")
+}
+
+model OverdueEscalation {
+  id             String      @id @default(uuid())
+  overdueCaseId  String      @map("overdue_case_id")
+  escalationTier Int         @map("escalation_tier")
+  channel        String      @default("IN_APP") // IN_APP, EMAIL, SMS
+  recipientRole  String?     @map("recipient_role")
+  recipientEmail String?     @map("recipient_email")
+  message        String
+  status         String      @default("SENT") // SENT, FAILED, DELIVERED
+  failureReason  String?     @map("failure_reason")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  overdueCase    OverdueCase @relation(fields: [overdueCaseId], references: [id], onDelete: Cascade)
+
+  @@index([overdueCaseId])
+  @@map("overdue_escalations")
+}
+
+model EscalationPolicy {
+  id               String   @id @default(uuid())
+  name             String
+  tier             Int      @default(0) // 0: Alert, 1: Custodian, 2: Supervisor, 3: IT Admin
+  thresholdMinutes Int      @map("threshold_minutes") // 0, 15, 30, 60
+  targetRoleCode   String   @map("target_role_code")
+  notifyEmail      Boolean  @default(true) @map("notify_email")
+  notifyInApp      Boolean  @default(true) @map("notify_in_app")
+  cooldownMinutes  Int      @default(30) @map("cooldown_minutes")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("escalation_policies")
+}
+
+model Incident {
+  id                String           @id @default(uuid())
+  incidentNumber    String           @unique @map("incident_number")
+  phoneAssetId      String?          @map("phone_asset_id")
+  employeeId        String?          @map("employee_id")
+  reportedByUserId  String           @map("reported_by_user_id")
+  incidentType      String           @map("incident_type") // DAMAGE, LOSS, THEFT, MALFUNCTION, UNAUTHORIZED_USE
+  severity          String           @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  description       String
+  status            String           @default("REPORTED") // REPORTED, UNDER_INVESTIGATION, SENT_FOR_REPAIR, REPAIRED, CLOSED
+  custodyTransactionId String?       @map("custody_transaction_id")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  phoneAsset        PhoneAsset?      @relation(fields: [phoneAssetId], references: [id], onDelete: SetNull)
+  employee          Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  reportedByUser    User             @relation("ReportedByUser", fields: [reportedByUserId], references: [id], onDelete: Restrict)
+  custodyTransaction CustodyTransaction? @relation(fields: [custodyTransactionId], references: [id], onDelete: SetNull)
+  actions           IncidentAction[]
+
+  @@index([status])
+  @@index([severity])
+  @@index([incidentType])
+  @@map("incidents")
+}
+
+model IncidentAction {
+  id          String   @id @default(uuid())
+  incidentId  String   @map("incident_id")
+  userId      String   @map("user_id")
+  actionType  String   @map("action_type") // COMMENT, STATUS_CHANGE, SENT_TO_VENDOR, RETURN_FROM_VENDOR, CHARGE_EMPLOYEE, WRITE_OFF
+  notes       String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([incidentId])
+  @@map("incident_actions")
+}
+
+model NotificationRule {
+  id               String   @id @default(uuid())
+  name             String
+  eventTrigger     String   @map("event_trigger") // OVERDUE_15M, OVERDUE_1H, DAMAGE_REPORTED, CARD_EXPIRED, READER_OFFLINE
+  targetRoleCode   String?  @map("target_role_code")
+  notifySupervisor Boolean  @default(true) @map("notify_supervisor")
+  notifyCustodian  Boolean  @default(true) @map("notify_custodian")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("notification_rules")
+}
+
+model Notification {
+  id                   String       @id @default(uuid())
+  recipientUserId      String?      @map("recipient_user_id")
+  recipientRoleCode    String?      @map("recipient_role_code")
+  title                String
+  message              String
+  type                 String       @default("INFO") // INFO, WARNING, ALERT, URGENT
+  severity             String       @default("INFO") // INFO, LOW, MEDIUM, HIGH, CRITICAL
+  isRead               Boolean      @default(false) @map("is_read")
+  readAt               DateTime?    @map("read_at")
+  linkUrl              String?      @map("link_url")
+  employeeId           String?      @map("employee_id")
+  phoneAssetId         String?      @map("phone_asset_id")
+  overdueCaseId        String?      @map("overdue_case_id")
+  acknowledgedAt       DateTime?    @map("acknowledged_at")
+  acknowledgedByUserId String?      @map("acknowledged_by_user_id")
+  emailSent            Boolean      @default(false) @map("email_sent")
+  emailSentAt          DateTime?    @map("email_sent_at")
+  emailError           String?      @map("email_error")
+  createdAt            DateTime     @default(now()) @map("created_at")
+
+  overdueCase          OverdueCase? @relation(fields: [overdueCaseId], references: [id], onDelete: SetNull)
+  employee             Employee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  phoneAsset           PhoneAsset?  @relation(fields: [phoneAssetId], references: [id], onDelete: SetNull)
+
+  @@index([recipientUserId, isRead])
+  @@index([recipientRoleCode])
+  @@index([overdueCaseId])
+  @@map("notifications")
+}
+
+model ReportRun {
+  id                String   @id @default(uuid())
+  reportName        String   @map("report_name")
+  reportType        String   @map("report_type") // DAILY_CUSTODY, OVERDUE_SUMMARY, ASSET_INVENTORY, AUDIT_TRAIL, INCIDENT_LOG
+  generatedByUserId String   @map("generated_by_user_id")
+  reportDate        String?  @map("report_date") // e.g. "2026-10-12"
+  parameters        String?
+  summaryMetrics    String?  @map("summary_metrics")
+  recipients        String?
+  recordCount       Int      @default(0) @map("record_count")
+  fileFormat        String   @default("CSV") @map("file_format") // CSV, PDF, XLSX, JSON
+  isScheduled       Boolean  @default(false) @map("is_scheduled")
+  status            String   @default("SUCCESS") // SUCCESS, FAILED
+  errorMessage      String?  @map("error_message")
+  downloadUrl       String?  @map("download_url")
+  fileSizeBytes     Int?     @map("file_size_bytes")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  generatedByUser   User     @relation(fields: [generatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([reportDate])
+  @@index([reportType])
+  @@map("report_runs")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  userEmail  String?  @map("user_email")
+  userRole   String?  @map("user_role")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  changes    String?
+  timestamp  DateTime @default(now())
+
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([timestamp])
+  @@index([action])
+  @@index([entityType])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  id              String   @id @default(uuid())
+  settingKey      String   @unique @map("setting_key")
+  settingValue    String   @map("setting_value")
+  category        String   @default("GENERAL")
+  description     String?
+  isPublic        Boolean  @default(false) @map("is_public")
+  updatedByUserId String?  @map("updated_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+model KioskDevice {
+  id                       String                     @id @default(uuid())
+  kioskCode                String                     @unique @map("kiosk_code") // e.g. KIOSK-MAIN-01
+  name                     String
+  location                 String                     @default("Building Lobby")
+  readerIdentifier         String?                    @map("reader_identifier")
+  status                   String                     @default("ACTIVE") // ACTIVE, DISABLED, REVOKED
+  ipAddress                String?                    @map("ip_address")
+  sessionSecret            String?                    @map("session_secret")
+  displayLanguage          String                     @default("EN") @map("display_language") // EN, FIL
+  soundEnabled             Boolean                    @default(true) @map("sound_enabled")
+  theme                    String                     @default("light") @map("theme") // light, dark
+  inactivityTimeoutSeconds Int                        @default(30) @map("inactivity_timeout_seconds")
+  lastHeartbeatAt          DateTime?                  @map("last_heartbeat_at")
+  lastSuccessfulScanAt     DateTime?                  @map("last_successful_scan_at")
+  lastError                String?                    @map("last_error")
+  notes                    String?
+  createdAt                DateTime                   @default(now()) @map("created_at")
+  updatedAt                DateTime                   @updatedAt @map("updated_at")
+
+  verificationRequests     KioskVerificationRequest[]
+
+  @@map("kiosk_devices")
+}
+
+model KioskVerificationRequest {
+  id                   String       @id @default(uuid())
+  requestCode          String       @unique @map("request_code") // e.g. KREQ-20261012-0001
+  kioskDeviceId        String?      @map("kiosk_device_id")
+  employeeId           String       @map("employee_id")
+  phoneAssetId         String       @map("phone_asset_id")
+  nfcCardId            String?      @map("nfc_card_id")
+  transactionType      String       @map("transaction_type") // ISSUANCE, SURRENDER
+  requestStatus        String       @default("PENDING") // PENDING, APPROVED, REJECTED, EXPIRED, CANCELLED
+  token                String       @unique // Short-lived single-use verification token
+  expiresAt            DateTime     @map("expires_at")
+  verifiedByUserId     String?      @map("verified_by_user_id")
+  conditionAtAction    String       @default("GOOD") @map("condition_at_action")
+  remarks              String?
+  accessoriesNotes     String?      @map("accessories_notes")
+  rejectionReason      String?      @map("rejection_reason")
+  custodyTransactionId String?      @map("custody_transaction_id")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+
+  kioskDevice          KioskDevice? @relation(fields: [kioskDeviceId], references: [id], onDelete: SetNull)
+  employee             Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  phoneAsset           PhoneAsset   @relation(fields: [phoneAssetId], references: [id], onDelete: Restrict)
+
+  @@index([requestStatus])
+  @@index([token])
+  @@index([createdAt])
+  @@map("kiosk_verification_requests")
+}
+

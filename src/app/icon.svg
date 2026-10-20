@@ -1,0 +1,57 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="badgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#4F46E5" />
+      <stop offset="45%" stopColor="#7C3AED" />
+      <stop offset="80%" stopColor="#D946EF" />
+      <stop offset="100%" stopColor="#EA580C" />
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#6366F1" stopOpacity="0.8" />
+      <stop offset="100%" stopColor="#F97316" stopOpacity="0.8" />
+    </linearGradient>
+    <linearGradient id="wingGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stopColor="#38BDF8" />
+      <stop offset="60%" stopColor="#F43F5E" />
+      <stop offset="100%" stopColor="#F59E0B" />
+    </linearGradient>
+    <linearGradient id="screenGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#1E1B4B" stopOpacity="0.9" />
+      <stop offset="100%" stopColor="#0F172A" stopOpacity="0.95" />
+    </linearGradient>
+    <linearGradient id="exGradA" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#10B981" />
+      <stop offset="100%" stopColor="#06B6D4" />
+    </linearGradient>
+    <linearGradient id="exGradB" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#F59E0B" />
+      <stop offset="100%" stopColor="#EF4444" />
+    </linearGradient>
+  </defs>
+
+  <rect x="2" y="2" width="60" height="60" rx="18" fill="url(#badgeGrad)" />
+  <rect x="2.5" y="2.5" width="59" height="59" rx="17.5" stroke="url(#glowGrad)" strokeWidth="1.2" strokeOpacity="0.6" />
+
+  <!-- Left Wing NFC Waves -->
+  <path d="M 17 40 C 11 36 8 28 10 20 C 11 16 13 13 17 11" stroke="url(#wingGrad)" strokeWidth="2.4" strokeLinecap="round" strokeOpacity="0.95" />
+  <path d="M 19 35 C 15 32 13 26 14 21 C 15 18 17 16 20 15" stroke="url(#wingGrad)" strokeWidth="2" strokeLinecap="round" strokeOpacity="0.75" />
+
+  <!-- Right Wing NFC Waves -->
+  <path d="M 47 40 C 53 36 56 28 54 20 C 53 16 51 13 47 11" stroke="url(#wingGrad)" strokeWidth="2.4" strokeLinecap="round" strokeOpacity="0.95" />
+  <path d="M 45 35 C 49 32 51 26 50 21 C 49 18 47 16 44 15" stroke="url(#wingGrad)" strokeWidth="2" strokeLinecap="round" strokeOpacity="0.75" />
+
+  <!-- Phoenix Crest Flame -->
+  <path d="M 32 6 C 30 10 29 12 32 14 C 35 12 34 10 32 6 Z" fill="#FDE047" />
+  <circle cx="32" cy="7.5" r="1.5" fill="#FFFFFF" />
+
+  <!-- Central Smartphone Hardware -->
+  <rect x="22" y="14" width="20" height="36" rx="4.5" fill="url(#screenGrad)" stroke="#FFFFFF" strokeWidth="1.8" />
+  <circle cx="32" cy="17" r="1" fill="#94A3B8" />
+  <rect x="28.5" y="46.5" width="7" height="1.2" rx="0.6" fill="#94A3B8" />
+
+  <!-- Inventory Exchange & Time In/Out Dynamics -->
+  <path d="M 28 32 L 34 26 M 34 26 H 30 M 34 26 V 30" stroke="url(#exGradA)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  <path d="M 36 34 L 30 40 M 30 40 H 34 M 30 40 V 36" stroke="url(#exGradB)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  <circle cx="32" cy="33" r="1.8" fill="#FFFFFF" />
+  <circle cx="32" cy="33" r="3" stroke="#FDE047" strokeWidth="0.8" strokeDasharray="1.5 1.5" />
+</svg>

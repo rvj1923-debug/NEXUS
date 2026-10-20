@@ -1,0 +1,19 @@
+# Caddy reverse proxy for Company Phone Tracker on an Azure VM.
+# Replace the address below with your DNS name (custom domain or the Azure
+# public IP DNS label, e.g. cpt-tracker.southeastasia.cloudapp.azure.com).
+# Caddy gets and renews the HTTPS certificate automatically (ports 80 and 443 must be open).
+# It also sends X-Forwarded-For / X-Forwarded-Proto / X-Forwarded-Host, which the app
+# uses for redirects, secure cookies and login rate limiting (TRUST_PROXY=true).
+
+phonetracker.example.com {
+	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy 127.0.0.1:5000
+}

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Starting NEXUS…</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: #020617;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .boot-container {
+      max-width: 560px;
+      width: 90%;
+      background-color: rgba(15, 23, 42, 0.9);
+      border: 1px solid #1e293b;
+      border-radius: 24px;
+      padding: 48px 40px;
+      text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65);
+    }
+
+    .spinner-wrapper {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 28px auto;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .spinner {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 5px solid #1e293b;
+      border-top-color: #38bdf8;
+      border-right-color: #38bdf8;
+      animation: spin 1s linear infinite;
+    }
+
+    .spinner.error-state {
+      border-top-color: #f59e0b;
+      border-right-color: #f59e0b;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #f8fafc;
+      margin-bottom: 12px;
+    }
+
+    p.subtitle {
+      font-size: 1rem;
+      line-height: 1.5;
+      color: #94a3b8;
+      margin-bottom: 24px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background-color: rgba(30, 41, 59, 0.75);
+      border: 1px solid #334155;
+      border-radius: 9999px;
+      padding: 8px 18px;
+      font-size: 0.85rem;
+      color: #cbd5e1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #38bdf8;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .pulse-dot.error-state {
+      background-color: #f59e0b;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+  </style>
+  <script src="./config.js"></script>
+</head>
+<body>
+  <div class="boot-container">
+    <div class="spinner-wrapper">
+      <div id="spinner" class="spinner"></div>
+    </div>
+    <h1 id="headline">Starting NEXUS…</h1>
+    <p id="subtitle" class="subtitle">
+      Waiting for local database and web services to initialize…
+    </p>
+    <div class="status-pill">
+      <span id="dot" class="pulse-dot"></span>
+      <span id="status-text">Checking service readiness (every 3s)…</span>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var POLL_INTERVAL_MS = 3000;
+      var UNAVAILABLE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+      var bootStartedAt = Date.now();
+      var attempts = 0;
+      var isRedirecting = false;
+
+      var cfg = window.CPT_KIOSK_CONFIG || {};
+      var baseUrl = (cfg.baseUrl || "http://localhost:5000").replace(/\/$/, "");
+      var deviceKey = cfg.deviceKey || window.KIOSK_DEVICE_SECRET || "";
+      var healthUrl = baseUrl + "/api/health";
+
+      var headlineEl = document.getElementById("headline");
+      var subtitleEl = document.getElementById("subtitle");
+      var statusTextEl = document.getElementById("status-text");
+      var spinnerEl = document.getElementById("spinner");
+      var dotEl = document.getElementById("dot");
+
+      function updateUnavailableBannerIfNeeded() {
+        var elapsed = Date.now() - bootStartedAt;
+        if (elapsed >= UNAVAILABLE_THRESHOLD_MS) {
+          headlineEl.textContent = "System unavailable – contact IT";
+          subtitleEl.textContent =
+            "Local services have not become ready after 5 minutes. Continuing automatic recovery checks every 3 seconds…";
+          spinnerEl.classList.add("error-state");
+          dotEl.classList.add("error-state");
+        }
+      }
+
+      async function checkHealth() {
+        if (isRedirecting) return;
+        attempts += 1;
+        updateUnavailableBannerIfNeeded();
+
+        var controller = new AbortController();
+        var timeoutId = setTimeout(function () {
+          controller.abort();
+        }, 2500);
+
+        try {
+          // Poll /api/health and verify HTTP 200 AND checks.database.status === "UP"
+          // (/api/health sets Access-Control-Allow-Origin: * so file:// origin can read status & JSON;
+          // unlike mode: 'no-cors' opaque responses, this ensures we wait until the database is UP, not 503).
+          var res = await fetch(healthUrl, {
+            method: "GET",
+            mode: "cors",
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+
+          if (res.ok && res.status === 200) {
+            var data = await res.json();
+            var dbUp =
+              data &&
+              data.checks &&
+              data.checks.database &&
+              data.checks.database.status === "UP";
+
+            if (dbUp) {
+              isRedirecting = true;
+              headlineEl.textContent = "Starting NEXUS…";
+              statusTextEl.textContent = "Services online — launching kiosk…";
+              var targetUrl =
+                baseUrl +
+                "/api/kiosk/device-login?key=" +
+                encodeURIComponent(deviceKey);
+              window.location.replace(targetUrl);
+              return;
+            } else {
+              statusTextEl.textContent =
+                "Web server up, waiting for database… (attempt #" + attempts + ")";
+            }
+          } else {
+            statusTextEl.textContent =
+              "Waiting for database (HTTP " + res.status + ", attempt #" + attempts + ")…";
+          }
+        } catch (err) {
+          clearTimeout(timeoutId);
+          statusTextEl.textContent =
+            "Waiting for services… (attempt #" + attempts + ")";
+        }
+
+        updateUnavailableBannerIfNeeded();
+        setTimeout(checkHealth, POLL_INTERVAL_MS);
+      }
+
+      // Start polling immediately, then every 3 seconds
+      checkHealth();
+    })();
+  </script>
+</body>
+</html>
